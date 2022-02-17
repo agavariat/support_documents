@@ -1,0 +1,66 @@
+<odoo>
+    <data>
+        <record id="account.action_vendor_bill_template" model="ir.actions.act_window">
+            <field name="name">Vendor Bills</field>
+            <field name="res_model">account.invoice</field>
+            <field name="view_type">form</field>
+            <field name="view_mode">tree,kanban,form,calendar,pivot,graph,activity</field>
+            <field eval="False" name="view_id"/>
+            <field name="domain">[('is_support_document', '=', False),('type','=','in_invoice')]</field>
+            <field name="context">{'default_type': 'in_invoice', 'type': 'in_invoice', 'journal_type': 'purchase'}</field>
+            <field name="search_view_id" ref="account.view_account_invoice_filter"/>
+            <field name="help" type="html">
+              <p class="o_view_nocontent_smiling_face">
+                Record a new vendor bill
+              </p>
+            </field>
+        </record>
+
+        <record id="view_account_journal_form_inherit_support_documents" model="ir.ui.view">
+            <field name="name">account.journal.form.account.journal.form</field>
+            <field name="inherit_id" ref="account.view_account_journal_form"/>
+            <field name="model">account.journal</field>
+            <field name="arch" type="xml">
+                <xpath expr="//field[@name='type']" position="after">
+                    <field name="is_support_document"/>
+                </xpath>
+            </field>
+        </record>
+
+        <record id="invoice_supplier_form_inherit_support_documents" model="ir.ui.view">
+            <field name="name">account.invoice.supplier.form.inh</field>
+            <field name="inherit_id" ref="account.invoice_supplier_form"/>
+            <field name="model">account.invoice</field>
+            <field name="arch" type="xml">
+                <xpath expr="//field[@name='journal_id']" position="after">
+                    <field name="is_support_document" invisible='1'/>
+                </xpath>
+            </field>
+        </record>
+
+        <record id="action_move_in_invoice_type_support_documents" model="ir.actions.act_window">
+            <field name="name">Support Documents</field>
+            <field name="res_model">account.invoice</field>
+            <field name="view_type">form</field>
+            <field name="view_mode">tree,kanban,form,calendar,pivot,graph,activity</field>
+            <field eval="False" name="view_id"/>
+            <field name="domain">[('is_support_document', '=', True),('type','=','in_invoice')]</field>
+            <field name="context">{'default_type': 'in_invoice', 'type': 'in_invoice', 'journal_type': 'purchase', 'is_support_document': True}</field>
+            <field name="search_view_id" ref="account.view_account_invoice_filter"/>
+            <field name="help" type="html">
+              <p class="o_view_nocontent_smiling_face">
+                Record a new support document
+              </p>
+            </field>
+        </record>
+
+        <menuitem
+            name="Support Documents"
+            id="menu_action_move_in_invoice_type_support_documents"
+            action="action_move_in_invoice_type_support_documents"
+            parent="account.menu_finance_payables"
+            sequence="1"
+        />
+    </data>
+</odoo>
+
