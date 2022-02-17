@@ -1,13 +1,7 @@
 # -*- encoding: utf-8 -*-
 
-from odoo import models, fields, api
-
-TYPE2JOURNAL = {
-    'out_invoice': 'sale',
-    'in_invoice': 'purchase',
-    'out_refund': 'sale',
-    'in_refund': 'purchase',
-}
+from odoo.exceptions import UserError
+from odoo import models, fields, api, _
 
 
 class AccountJournal(models.Model):
@@ -17,56 +11,61 @@ class AccountJournal(models.Model):
     is_support_document = fields.Boolean('Is Support Document Journal?')
 
 
-class AccountInvoice(models.Model):
+class AccountMove(models.Model):
 
-    _inherit = "account.invoice"
+    _inherit = "account.move"
 
-    is_support_document = fields.Boolean(
-        'Is Support Document?', compute="_compute_is_support_document", store=True)
+    is_support_document = fields.Boolean('Is Support Document?', compute="_compute_is_support_document", store=True)
 
     @api.model
-    def _default_journal(self):
-        if self._context.get('default_journal_id', False):
-            return self.env['account.journal'].browse(self._context.get('default_journal_id'))
-        inv_type = self._context.get('type', 'out_invoice')
-        inv_types = inv_type if isinstance(inv_type, list) else [inv_type]
-        company_id = self._context.get('company_id', self.env.user.company_id.id)
-        domain = [
-            ('type', 'in', [TYPE2JOURNAL[ty] for ty in inv_types if ty in TYPE2JOURNAL]),
-            ('company_id', '=', company_id),
-        ]
-        if self._context.get('type', 'out_invoice') == 'in_invoice' and self._context.get('is_support_document'):
-            domain.append(('is_support_document', '=', True))
+    def _search_default_journal(self, journal_types):
+        company_id = self._context.get('default_company_id', self.env.company.id)
+        domain = [('company_id', '=', company_id), ('type', 'in', journal_types)]
 
-        company_currency_id = self.env['res.company'].browse(company_id).currency_id.id
-        currency_id = self._context.get('default_currency_id') or company_currency_id
-        currency_clause = [('currency_id', '=', currency_id)]
-        if currency_id == company_currency_id:
-            currency_clause = ['|', ('currency_id', '=', False)] + currency_clause
-        return (
-            self.env['account.journal'].search(domain + currency_clause, limit=1)
-            or self.env['account.journal'].search(domain, limit=1)
-        )
+        if 'purchase' in journal_types:
+            is_support_document = False
+            if self.env.context.get('is_support_document'):
+                is_support_document = True
+            domain.append(('is_support_document', '=', is_support_document))
 
-    def _get_journal_domain(self):
-        domain = "[('type', 'in', {'out_invoice': ['sale'], 'out_refund': ['sale'], 'in_refund': ['purchase'], 'in_invoice': ['purchase']}.get(type, [])), ('company_id', '=', company_id)]"
-        if self._context.get('type', '') == 'in_invoice' and self._context.get('is_support_document'):
-            domain = "[('type', 'in', {'out_invoice': ['sale'], 'out_refund': ['sale'], 'in_refund': ['purchase'], 'in_invoice': ['purchase']}.get(type, [])), ('company_id', '=', company_id), ('is_support_document', '=', True)]"
-        elif self._context.get('type', '') == 'in_invoice' and not self._context.get('is_support_document'):
-            domain = "[('type', 'in', {'out_invoice': ['sale'], 'out_refund': ['sale'], 'in_refund': ['purchase'], 'in_invoice': ['purchase']}.get(type, [])), ('company_id', '=', company_id), ('is_support_document', '=', False)]"
-        return domain
+        journal = None
+        if self._context.get('default_currency_id'):
+            currency_domain = domain + [('currency_id', '=', self._context['default_currency_id'])]
+            journal = self.env['account.journal'].search(currency_domain, limit=1)
 
-    journal_id = fields.Many2one('account.journal', string='Journal',
-                                 required=True, readonly=True, states={'draft': [('readonly', False)]},
-                                 default=_default_journal,
-                                 domain=_get_journal_domain)
+        if not journal:
+            journal = self.env['account.journal'].search(domain, limit=1)
 
-    @api.onchange('journal_id', 'type')
+        if not journal:
+            company = self.env['res.company'].browse(company_id)
+
+            error_msg = _(
+                "No journal could be found in company %(company_name)s for any of those types: %(journal_types)s",
+                company_name=company.display_name,
+                journal_types=', '.join(journal_types),
+            )
+            raise UserError(error_msg)
+
+        return journal
+
+    @api.depends('company_id', 'invoice_filter_type_domain')
+    def _compute_suitable_journal_ids(self):
+        for m in self:
+            journal_type = m.invoice_filter_type_domain or 'general'
+            company_id = m.company_id.id or self.env.company.id
+            domain = [('company_id', '=', company_id), ('type', '=', journal_type)]
+            if journal_type == 'purchase' and self.env.context.get('is_support_document'):
+                domain.append(('is_support_document', '=', True))
+            if journal_type == 'purchase' and not self.env.context.get('is_support_document'):
+                domain.append(('is_support_document', '=', False))
+            m.suitable_journal_ids = self.env['account.journal'].search(domain)
+
+    @api.onchange('journal_id', 'move_type')
     def _onchange_journal_id_type(self):
         for move in self:
             move._compute_is_support_document()
 
-    @api.depends('journal_id', 'type')
+    @api.depends('journal_id', 'move_type')
     def _compute_is_support_document(self):
         for move in self:
             move.is_support_document = False
