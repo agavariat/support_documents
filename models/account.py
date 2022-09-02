@@ -15,6 +15,13 @@ class AccountJournal(models.Model):
     _inherit = "account.journal"
 
     is_support_document = fields.Boolean('Is Support Document Journal?')
+    generation_form = fields.Selection([("1", "Por operación"),
+                                        ("2", "Acumulado semanal")
+                                        ],
+                                        string = "Forma de Generación",
+                                        default = "1",
+                                        help = "1 - Por operación: Para las compras con fecha de reporte real, 2 - Acumulado semanal: Para las compras con reporte semanal",
+                                        store = True)
 
 
 class AccountInvoice(models.Model):
@@ -23,6 +30,14 @@ class AccountInvoice(models.Model):
 
     is_support_document = fields.Boolean(
         'Is Support Document?', compute="_compute_is_support_document", store=True)
+    generation_form = fields.Selection([("1", "Por operación"),
+                                        ("2", "Acumulado semanal")
+                                        ],
+                                        string = "Forma de Generación",
+                                        default = "1",
+                                        help = "1 - Por operación: Para las compras con fecha de reporte real, 2 - Acumulado semanal: Para las compras con reporte semanal",
+                                        store = True)
+
 
     @api.model
     def _default_journal(self):
